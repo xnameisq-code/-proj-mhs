@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MHS Personnel Management System</title>
+    <!-- 폰트 적용 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chiron+Sung+HK:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- 🔥 파이어베이스 라이브러리 불러오기 (CDN) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #050507;
+            --text-color: #e0e0e0;
+            --accent-red: #ff2a2a;
+            --accent-purple: #8a2be2;
+            --line-color: #333;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Chiron Sung HK', serif;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 40px 20px 20px; text-align: center; position: relative;
+            border-bottom: 1px solid var(--line-color);
+            background: linear-gradient(180deg, #111 0%, transparent 100%);
+        }
+
+        header h1 {
+            margin: 0; font-size: 36px; font-weight: 700; letter-spacing: 8px;
+            text-shadow: 0 0 15px rgba(255, 42, 42, 0.4); color: #fff;
+        }
+
+        .master-login-btn {
+            position: absolute; top: 20px; right: 20px;
+            background: transparent; border: 1px solid var(--line-color);
+            color: #666; cursor: pointer; padding: 5px 10px; font-size: 12px;
+            border-radius: 4px; transition: 0.3s;
+        }
+        .master-login-btn:hover { border-color: var(--accent-red); color: var(--accent-red); }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+
+        .sector { margin-bottom: 60px; }
+        .sector-header { display: flex; align-items: center; margin-bottom: 30px; }
+        .sector-header h2 { margin: 0; font-size: 24px; color: #fff; letter-spacing: 4px; padding-right: 20px; }
+        
+        #sector-underworld h2 { text-shadow: 0 0 10px rgba(138, 43, 226, 0.6); }
+        #sector-special h2 { text-shadow: 0 0 10px rgba(255, 42, 42, 0.6); }
+        #sector-secret h2 { text-shadow: 0 0 10px rgba(200, 200, 200, 0.4); }
+
+        .sector-line { flex-grow: 1; height: 1px; background: linear-gradient(90deg, var(--line-color) 0%, transparent 100%); }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 25px; }
+
+        .agent-card {
+            background: #0f0f13; border: 1px solid #1f1f25; border-radius: 6px; overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s; position: relative;
+        }
+        .agent-card:hover { transform: translateY(-5px); border-color: var(--accent-red); box-shadow: 0 10px 20px rgba(255, 42, 42, 0.15); }
+
+        .card-photo { width: 100%; height: 220px; background-color: #000; position: relative; overflow: hidden; }
+        .card-photo img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(30%); transition: 0.3s; }
+        .agent-card:hover .card-photo img { filter: grayscale(0%); }
+
+        .card-info { padding: 15px; text-align: center; }
+        .card-name { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 5px; letter-spacing: 2px; }
+        .card-gender { font-size: 12px; color: #888; }
+
+        /* 마스터 전용 UI */
+        .master-only { display: none; }
+        body.master-mode .master-only { display: flex; }
+        body.master-mode .master-login-btn { background: var(--accent-red); color: #fff; border-color: var(--accent-red); text-shadow: none; }
+
+        .add-card-btn {
+            background: rgba(255, 255, 255, 0.02); border: 1px dashed #444; border-radius: 6px;
+            display: flex; justify-content: center; align-items: center; height: 290px;
+            cursor: pointer; color: #666; font-size: 40px; transition: 0.3s;
+        }
+        .add-card-btn:hover { background: rgba(255, 42, 42, 0.05); border-color: var(--accent-red); color: var(--accent-red); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>멸혼사 인사 관리 시스템</h1>
+        <button class="master-login-btn" onclick="toggleMasterMode()">⚙️ Master</button>
+    </header>
+
+    <div class="container">
+        <!-- 저승 섹션 -->
+        <div class="sector" id="sector-underworld">
+            <div class="sector-header"><h2>저승</h2><div class="sector-line"></div></div>
+            <div class="grid" id="grid-underworld"></div>
+        </div>
+
+        <!-- 특대과 섹션 -->
+        <div class="sector" id="sector-special">
+            <div class="sector-header"><h2>특대과</h2><div class="sector-line"></div></div>
+            <div class="grid" id="grid-special"></div>
+        </div>
+
+        <!-- 비문 섹션 -->
+        <div class="sector" id="sector-secret">
+            <div class="sector-header"><h2>비문</h2><div class="sector-line"></div></div>
+            <div class="grid" id="grid-secret"></div>
+        </div>
+    </div>
+
+    <script>
+        // 🔥 유저님이 찾아오신 진짜 열쇠 (적용 완료!)
+        const firebaseConfig = {
+            apiKey: "AIzaSyB3BYyOVfRSpugWp5hLZeQMikzEAZG4KWc",
+            authDomain: "proj-mhs.firebaseapp.com",
+            projectId: "proj-mhs",
+            storageBucket: "proj-mhs.firebasestorage.app",
+            messagingSenderId: "280336894573",
+            appId: "1:280336894573:web:fa896b9d61d5d393660d64",
+            measurementId: "G-H8P1DHJ223"
+        };
+
+        // 파이어베이스 초기화 및 데이터베이스 연결
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let isMaster = false;
+
+        // 마스터 모드 토글
+        function toggleMasterMode() {
+            if (!isMaster) {
+                const pwd = prompt("마스터 권한 암호를 입력하세요.");
+                if (pwd === "mhs123") { // 기본 비밀번호: mhs123
+                    isMaster = true;
+                    document.body.classList.add('master-mode');
+                    document.querySelector('.master-login-btn').innerText = "🔓 Master ON";
+                    alert("마스터 모드 활성화 완료. [+] 버튼으로 인원을 영구 등록할 수 있습니다.");
+                } else if (pwd !== null) {
+                    alert("암호가 일치하지 않습니다.");
+                }
+            } else {
+                isMaster = false;
+                document.body.classList.remove('master-mode');
+                document.querySelector('.master-login-btn').innerText = "⚙️ Master";
+            }
+        }
+
+        // [+] 버튼 클릭 시 파이어베이스에 데이터 추가 (영구 저장)
+        function addAgentPrompt(gridId) {
+            const sectorName = gridId.replace('grid-', '');
+            
+            const name = prompt("요원의 이름을 입력하세요:");
+            if (!name) return;
+            const gender = prompt("성별을 입력하세요 (예: 남성, 여성, 무성):", "미상");
+            const photoUrl = prompt("사진 이미지 링크(URL)를 입력하세요:\n(없으면 빈칸으로 두세요. 온라인에 올라간 사진 링크여야 합니다.)", "");
+
+            const defaultPhoto = "https://via.placeholder.com/200x250/111/555?text=No+Image";
+            
+            // 파이어베이스 'agents' 컬렉션에 데이터 추가
+            db.collection("agents").add({
+                sector: sectorName,
+                name: name,
+                gender: gender,
+                photo: photoUrl ? photoUrl : defaultPhoto,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp() // 생성 시간 기록
+            })
+            .then(() => {
+                alert(`'${name}' 요원이 데이터베이스에 영구 등록되었습니다!`);
+            })
+            .catch((error) => {
+                console.error("추가 에러: ", error);
+                alert("등록 중 오류가 발생했습니다. 파이어베이스 데이터베이스 규칙 설정을 확인해 주세요.");
+            });
+        }
+
+        // 🔥 실시간 데이터 불러오기
+        db.collection("agents").orderBy("createdAt", "asc").onSnapshot((querySnapshot) => {
+            // 일단 화면의 카드들을 다 지웁니다.
+            document.getElementById('grid-underworld').innerHTML = '';
+            document.getElementById('grid-special').innerHTML = '';
+            document.getElementById('grid-secret').innerHTML = '';
+
+            // DB에서 가져온 요원들을 화면에 그려줍니다.
+            querySnapshot.forEach((doc) => {
+                const agent = doc.data();
+                const cardHTML = `
+                    <div class="agent-card">
+                        <div class="card-photo">
+                            <img src="${agent.photo}" alt="${agent.name}">
+                        </div>
+                        <div class="card-info">
+                            <div class="card-name">${agent.name}</div>
+                            <div class="card-gender">${agent.gender}</div>
+                        </div>
+                    </div>
+                `;
+                // 해당 섹터에 카드 꽂아넣기
+                const gridElement = document.getElementById(`grid-${agent.sector}`);
+                if(gridElement) {
+                    gridElement.insertAdjacentHTML('beforeend', cardHTML);
+                }
+            });
+
+            // 마스터용 [+] 버튼을 다시 맨 끝에 달아줍니다.
+            const addBtnHTML = `<div class="add-card-btn master-only" onclick="addAgentPrompt(this.parentElement.id)">+</div>`;
+            document.getElementById('grid-underworld').insertAdjacentHTML('beforeend', addBtnHTML);
+            document.getElementById('grid-special').insertAdjacentHTML('beforeend', addBtnHTML);
+            document.getElementById('grid-secret').insertAdjacentHTML('beforeend', addBtnHTML);
+        });
+
+    </script>
+</body>
+</html>
